@@ -17,5 +17,9 @@ Thumbs.db
 .vscode/
 *.sw?
 
+# Environment overrides
+.env.production
+.env.local
+
 # Project screenshots (local reference only)
 *.png

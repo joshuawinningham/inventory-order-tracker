@@ -9,7 +9,7 @@ import type {
   OrderStatus,
 } from '../types';
 
-const BASE = 'http://localhost:5000/api';
+const BASE = (import.meta.env.VITE_API_URL || 'http://localhost:5239') + '/api';
 
 async function request<T>(url: string, init?: RequestInit): Promise<T> {
   const res = await fetch(url, {
