@@ -38,17 +38,18 @@ cd ..
 
 echo ""
 echo "=== Step 2: Deploy API to App Runner ==="
-# Delete existing service if any
-EXISTING=$(aws apprunner list-services --query 'ServiceSummaryList[?ServiceName==`order-tracker-api`].ServiceArn' --output text 2>/dev/null)
-if [ -n "$EXISTING" ] && [ "$EXISTING" != "None" ]; then
-  echo "Deleting existing App Runner service..."
-  aws apprunner delete-service --service-arn "$EXISTING" >/dev/null 2>&1
-  echo "Waiting for deletion..."
-  while [ "$(aws apprunner list-services --query 'ServiceSummaryList[?ServiceName==`order-tracker-api`]' --output json)" != "[]" ]; do
-    sleep 15
-  done
-  echo "Old service deleted."
-fi
+# Create auto-scaling config with MinSize 0 (pause when idle, pay only for requests)
+AUTOSCALING_ARN=$(aws apprunner create-auto-scaling-configuration \
+  --auto-scaling-configuration-name order-tracker-scaling \
+  --min-size 0 \
+  --max-size 1 \
+  --max-concurrency 100 \
+  --region $REGION \
+  --query 'AutoScalingConfiguration.AutoScalingConfigurationArn' --output text 2>/dev/null || \
+  aws apprunner describe-auto-scaling-configuration \
+  --auto-scaling-configuration-arn "arn:aws:apprunner:$REGION:$ACCOUNT_ID:autoscalingconfiguration/order-tracker-scaling" \
+  --query 'AutoScalingConfiguration.AutoScalingConfigurationArn' --output text)
+echo "Auto-scaling config: MinSize=0 (pause when idle)"
 
 # Write source config to temp file to avoid shell escaping issues
 CONN_STRING="Server=$RDS_ENDPOINT,1433;Database=OrderTracker;User Id=admin;Password=$RDS_PASSWORD;TrustServerCertificate=True;Connect Timeout=60"
@@ -71,24 +72,40 @@ cat > /tmp/apprunner-source.json << ENDJSON
 }
 ENDJSON
 
-API_URL=$(aws apprunner create-service \
-  --service-name order-tracker-api \
-  --source-configuration file:///tmp/apprunner-source.json \
-  --instance-configuration '{"Cpu": "0.25 vCPU", "Memory": "1 GB"}' \
-  --health-check-configuration '{"Protocol": "HTTP", "Path": "/health", "Interval": 20, "Timeout": 10, "HealthyThreshold": 1, "UnhealthyThreshold": 10}' \
-  --network-configuration "{\"EgressConfiguration\": {\"EgressType\": \"VPC\", \"VpcConnectorArn\": \"$VPC_CONNECTOR_ARN\"}}" \
-  --region $REGION \
-  --query 'Service.ServiceUrl' --output text)
+# Check if service already exists — update in place instead of delete/recreate
+EXISTING=$(aws apprunner list-services --query 'ServiceSummaryList[?ServiceName==`order-tracker-api`].ServiceArn' --output text 2>/dev/null)
+if [ -n "$EXISTING" ] && [ "$EXISTING" != "None" ]; then
+  echo "Existing service found — updating in place..."
+  SERVICE_ARN="$EXISTING"
+  API_URL=$(aws apprunner describe-service --service-arn "$SERVICE_ARN" --query 'Service.ServiceUrl' --output text)
+  aws apprunner update-service \
+    --service-arn "$SERVICE_ARN" \
+    --source-configuration file:///tmp/apprunner-source.json \
+    --auto-scaling-configuration-arn "$AUTOSCALING_ARN" \
+    --health-check-configuration '{"Protocol": "HTTP", "Path": "/health", "Interval": 20, "Timeout": 10, "HealthyThreshold": 1, "UnhealthyThreshold": 10}' \
+    >/dev/null 2>&1
+else
+  echo "No existing service — creating new..."
+  API_URL=$(aws apprunner create-service \
+    --service-name order-tracker-api \
+    --source-configuration file:///tmp/apprunner-source.json \
+    --instance-configuration '{"Cpu": "0.25 vCPU", "Memory": "1 GB"}' \
+    --auto-scaling-configuration-arn "$AUTOSCALING_ARN" \
+    --health-check-configuration '{"Protocol": "HTTP", "Path": "/health", "Interval": 20, "Timeout": 10, "HealthyThreshold": 1, "UnhealthyThreshold": 10}' \
+    --network-configuration "{\"EgressConfiguration\": {\"EgressType\": \"VPC\", \"VpcConnectorArn\": \"$VPC_CONNECTOR_ARN\"}}" \
+    --region $REGION \
+    --query 'Service.ServiceUrl' --output text)
+  SERVICE_ARN=$(aws apprunner list-services --query 'ServiceSummaryList[?ServiceName==`order-tracker-api`].ServiceArn' --output text)
+fi
 
 echo "API URL: https://$API_URL"
-echo "Waiting for deployment (this takes ~5-10 minutes)..."
+echo "Waiting for deployment (this takes ~3-10 minutes)..."
 
 while true; do
-  SERVICE_ARN=$(aws apprunner list-services --query 'ServiceSummaryList[?ServiceName==`order-tracker-api`].ServiceArn' --output text)
   STATUS=$(aws apprunner describe-service --service-arn "$SERVICE_ARN" --query 'Service.Status' --output text)
   echo "  $(date +%H:%M:%S) Status: $STATUS"
   if [ "$STATUS" = "RUNNING" ]; then echo "API is RUNNING!"; break; fi
-  if [ "$STATUS" = "CREATE_FAILED" ]; then echo "FAILED! Check CloudWatch logs."; exit 1; fi
+  if [ "$STATUS" = "CREATE_FAILED" ] || [ "$STATUS" = "UPDATE_FAILED" ]; then echo "FAILED! Check CloudWatch logs."; exit 1; fi
   sleep 30
 done
 
@@ -105,49 +122,62 @@ aws s3 sync dist/ s3://$S3_BUCKET/ --delete
 cd ..
 
 echo ""
-echo "=== Step 4: Create CloudFront distribution ==="
+echo "=== Step 4: CloudFront distribution ==="
 OAC_ID="EQQ2ABRAWTV8K"
-CF_RESULT=$(aws cloudfront create-distribution \
-  --distribution-config "{
-    \"CallerReference\": \"order-tracker-$(date +%s)\",
-    \"Comment\": \"Order Tracker UI\",
-    \"DefaultCacheBehavior\": {
-      \"TargetOriginId\": \"S3-order-tracker-ui\",
-      \"ViewerProtocolPolicy\": \"redirect-to-https\",
-      \"AllowedMethods\": {\"Quantity\": 2, \"Items\": [\"GET\", \"HEAD\"], \"CachedMethods\": {\"Quantity\": 2, \"Items\": [\"GET\", \"HEAD\"]}},
-      \"ForwardedValues\": {\"QueryString\": false, \"Cookies\": {\"Forward\": \"none\"}},
-      \"Compress\": true,
-      \"MinTTL\": 0, \"DefaultTTL\": 86400, \"MaxTTL\": 31536000
-    },
-    \"Origins\": {\"Quantity\": 1, \"Items\": [{\"Id\": \"S3-order-tracker-ui\", \"DomainName\": \"$S3_BUCKET.s3.us-east-1.amazonaws.com\", \"OriginAccessControlId\": \"$OAC_ID\", \"S3OriginConfig\": {\"OriginAccessIdentity\": \"\"}}]},
-    \"Enabled\": true,
-    \"DefaultRootObject\": \"index.html\",
-    \"CustomErrorResponses\": {\"Quantity\": 1, \"Items\": [{\"ErrorCode\": 403, \"ResponseCode\": \"200\", \"ResponsePagePath\": \"/index.html\", \"ErrorCachingMinTTL\": 10}]}
-  }" \
-  --query 'Distribution.{Domain:DomainName,Id:Id}' --output json)
 
-CF_DOMAIN=$(echo "$CF_RESULT" | python3 -c "import sys,json; print(json.load(sys.stdin)['Domain'])")
-CF_DIST_ID=$(echo "$CF_RESULT" | python3 -c "import sys,json; print(json.load(sys.stdin)['Id'])")
+# Check if a CloudFront distribution already exists for this S3 bucket
+CF_DIST_ID=$(aws cloudfront list-distributions \
+  --query "DistributionList.Items[?Origins.Items[0].DomainName=='$S3_BUCKET.s3.us-east-1.amazonaws.com'].Id | [0]" \
+  --output text 2>/dev/null)
 
-# Grant CloudFront access to S3 bucket
-aws s3api put-bucket-policy --bucket $S3_BUCKET --policy "{
-  \"Version\": \"2012-10-17\",
-  \"Statement\": [{
-    \"Sid\": \"AllowCloudFrontServicePrincipalReadOnly\",
-    \"Effect\": \"Allow\",
-    \"Principal\": {\"Service\": \"cloudfront.amazonaws.com\"},
-    \"Action\": \"s3:GetObject\",
-    \"Resource\": \"arn:aws:s3:::$S3_BUCKET/*\",
-    \"Condition\": {\"StringEquals\": {\"AWS:SourceArn\": \"arn:aws:cloudfront::$ACCOUNT_ID:distribution/$CF_DIST_ID\"}}
-  }]
-}"
+if [ -n "$CF_DIST_ID" ] && [ "$CF_DIST_ID" != "None" ]; then
+  echo "Existing CloudFront distribution found: $CF_DIST_ID"
+  CF_DOMAIN=$(aws cloudfront get-distribution --id "$CF_DIST_ID" --query 'Distribution.DomainName' --output text)
+  # Invalidate cache so new frontend is served immediately
+  aws cloudfront create-invalidation --distribution-id "$CF_DIST_ID" --paths "/*" >/dev/null 2>&1
+  echo "Cache invalidated."
+else
+  echo "Creating new CloudFront distribution..."
+  CF_RESULT=$(aws cloudfront create-distribution \
+    --distribution-config "{
+      \"CallerReference\": \"order-tracker-$(date +%s)\",
+      \"Comment\": \"Order Tracker UI\",
+      \"DefaultCacheBehavior\": {
+        \"TargetOriginId\": \"S3-order-tracker-ui\",
+        \"ViewerProtocolPolicy\": \"redirect-to-https\",
+        \"AllowedMethods\": {\"Quantity\": 2, \"Items\": [\"GET\", \"HEAD\"], \"CachedMethods\": {\"Quantity\": 2, \"Items\": [\"GET\", \"HEAD\"]}},
+        \"ForwardedValues\": {\"QueryString\": false, \"Cookies\": {\"Forward\": \"none\"}},
+        \"Compress\": true,
+        \"MinTTL\": 0, \"DefaultTTL\": 86400, \"MaxTTL\": 31536000
+      },
+      \"Origins\": {\"Quantity\": 1, \"Items\": [{\"Id\": \"S3-order-tracker-ui\", \"DomainName\": \"$S3_BUCKET.s3.us-east-1.amazonaws.com\", \"OriginAccessControlId\": \"$OAC_ID\", \"S3OriginConfig\": {\"OriginAccessIdentity\": \"\"}}]},
+      \"Enabled\": true,
+      \"DefaultRootObject\": \"index.html\",
+      \"CustomErrorResponses\": {\"Quantity\": 1, \"Items\": [{\"ErrorCode\": 403, \"ResponseCode\": \"200\", \"ResponsePagePath\": \"/index.html\", \"ErrorCachingMinTTL\": 10}]}
+    }" \
+    --query 'Distribution.{Domain:DomainName,Id:Id}' --output json)
+
+  CF_DOMAIN=$(echo "$CF_RESULT" | python3 -c "import sys,json; print(json.load(sys.stdin)['Domain'])")
+  CF_DIST_ID=$(echo "$CF_RESULT" | python3 -c "import sys,json; print(json.load(sys.stdin)['Id'])")
+
+  # Grant CloudFront access to S3 bucket
+  aws s3api put-bucket-policy --bucket $S3_BUCKET --policy "{
+    \"Version\": \"2012-10-17\",
+    \"Statement\": [{
+      \"Sid\": \"AllowCloudFrontServicePrincipalReadOnly\",
+      \"Effect\": \"Allow\",
+      \"Principal\": {\"Service\": \"cloudfront.amazonaws.com\"},
+      \"Action\": \"s3:GetObject\",
+      \"Resource\": \"arn:aws:s3:::$S3_BUCKET/*\",
+      \"Condition\": {\"StringEquals\": {\"AWS:SourceArn\": \"arn:aws:cloudfront::$ACCOUNT_ID:distribution/$CF_DIST_ID\"}}
+    }]
+  }"
+fi
 
 echo "CloudFront domain: https://$CF_DOMAIN"
 
 echo ""
 echo "=== Step 5: Update CORS with CloudFront domain ==="
-SERVICE_ARN=$(aws apprunner list-services --query 'ServiceSummaryList[?ServiceName==`order-tracker-api`].ServiceArn' --output text)
-
 cat > /tmp/apprunner-update.json << ENDJSON
 {
   "AuthenticationConfiguration": {"AccessRoleArn": "$ACCESS_ROLE_ARN"},
