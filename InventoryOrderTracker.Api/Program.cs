@@ -17,12 +17,8 @@ builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 
 builder.Services.AddDbContext<AppDbContext>(options =>
-    options.UseSqlServer(
-        builder.Configuration.GetConnectionString("DefaultConnection"),
-        sqlOptions => sqlOptions.EnableRetryOnFailure(
-            maxRetryCount: 5,
-            maxRetryDelay: TimeSpan.FromSeconds(30),
-            errorNumbersToAdd: null)));
+    options.UseSqlite(
+        builder.Configuration.GetConnectionString("DefaultConnection")));
 
 var allowedOrigins = builder.Configuration.GetSection("Cors:AllowedOrigins").Get<string[]>()
     ?? Array.Empty<string>();
@@ -50,28 +46,11 @@ builder.Services.AddCors(options =>
 
 var app = builder.Build();
 
-_ = Task.Run(async () =>
+using (var scope = app.Services.CreateScope())
 {
-    using var scope = app.Services.CreateScope();
-    var logger = scope.ServiceProvider.GetRequiredService<ILogger<Program>>();
     var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
-    var retries = 10;
-    for (var i = 0; i < retries; i++)
-    {
-        try
-        {
-            logger.LogInformation("Applying database migrations (attempt {Attempt}/{Max})...", i + 1, retries);
-            db.Database.Migrate();
-            logger.LogInformation("Database migrations applied successfully.");
-            return;
-        }
-        catch (Exception ex)
-        {
-            logger.LogWarning(ex, "Migration attempt {Attempt} failed. Retrying in 15s...", i + 1);
-            if (i < retries - 1) await Task.Delay(15_000);
-        }
-    }
-});
+    db.Database.Migrate();
+}
 
 // Configure the HTTP request pipeline.
 if (app.Environment.IsDevelopment())

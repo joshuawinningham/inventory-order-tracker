@@ -9,7 +9,7 @@ B2B-style Inventory & Order Tracker — a full-stack app for managing products a
 ## Tech Stack
 
 - **Backend:** ASP.NET Core 8 Web API (C#), Entity Framework Core
-- **Database:** SQL Server (LocalDB/Docker for dev) or PostgreSQL via Npgsql as alternative
+- **Database:** SQLite (embedded, ephemeral — recreated from migrations + seed data on each deploy)
 - **Frontend:** React + TypeScript + Tailwind CSS, built with Vite
 - **Solution file:** `InventoryOrderTracker.sln`
 
@@ -48,12 +48,8 @@ npm run dev                           # Start Vite dev server
 npm run build                         # Production build
 ```
 
-### Database (Docker)
-```bash
-docker run -e "ACCEPT_EULA=Y" -e "MSSQL_SA_PASSWORD=YourPassword123!" \
-  -p 1433:1433 --name sql-server \
-  -d mcr.microsoft.com/mssql/server:2022-latest
-```
+### Database
+SQLite database file is created automatically on startup via EF Core migrations. No external database server needed.
 
 ## Data Model
 

@@ -12,20 +12,15 @@ set -e
 #
 # Resources already created:
 #   - ECR repo: order-tracker-api
-#   - RDS SQL Server: order-tracker-db
 #   - S3 bucket: order-tracker-ui-482817994966
 #   - IAM role: AppRunnerECRAccessRole
-#   - VPC connector: order-tracker-vpc-connector
 # ============================================================
 
 ACCOUNT_ID=482817994966
 REGION=us-east-1
 ECR_REGISTRY=$ACCOUNT_ID.dkr.ecr.$REGION.amazonaws.com
 ECR_IMAGE=$ECR_REGISTRY/order-tracker-api:latest
-RDS_ENDPOINT=order-tracker-db.cmzywyqok70d.us-east-1.rds.amazonaws.com
-RDS_PASSWORD="Tracker2026Pass"
 S3_BUCKET=order-tracker-ui-$ACCOUNT_ID
-VPC_CONNECTOR_ARN="arn:aws:apprunner:us-east-1:482817994966:vpcconnector/order-tracker-vpc-connector/1/646032d7859f4919890860f114af8c19"
 ACCESS_ROLE_ARN="arn:aws:iam::482817994966:role/AppRunnerECRAccessRole"
 
 echo "=== Step 1: Build and push API Docker image ==="
@@ -38,21 +33,22 @@ cd ..
 
 echo ""
 echo "=== Step 2: Deploy API to App Runner ==="
-# Create auto-scaling config with MinSize 0 (pause when idle, pay only for requests)
+# Create or find auto-scaling config (MinSize=1, MaxSize=1)
 AUTOSCALING_ARN=$(aws apprunner create-auto-scaling-configuration \
   --auto-scaling-configuration-name order-tracker-scaling \
-  --min-size 0 \
+  --min-size 1 \
   --max-size 1 \
   --max-concurrency 100 \
   --region $REGION \
   --query 'AutoScalingConfiguration.AutoScalingConfigurationArn' --output text 2>/dev/null || \
-  aws apprunner describe-auto-scaling-configuration \
-  --auto-scaling-configuration-arn "arn:aws:apprunner:$REGION:$ACCOUNT_ID:autoscalingconfiguration/order-tracker-scaling" \
-  --query 'AutoScalingConfiguration.AutoScalingConfigurationArn' --output text)
-echo "Auto-scaling config: MinSize=0 (pause when idle)"
+  aws apprunner list-auto-scaling-configurations \
+  --auto-scaling-configuration-name order-tracker-scaling \
+  --latest-only \
+  --region $REGION \
+  --query 'AutoScalingConfigurationSummaryList[0].AutoScalingConfigurationArn' --output text)
+echo "Auto-scaling config: $AUTOSCALING_ARN"
 
 # Write source config to temp file to avoid shell escaping issues
-CONN_STRING="Server=$RDS_ENDPOINT,1433;Database=OrderTracker;User Id=admin;Password=$RDS_PASSWORD;TrustServerCertificate=True;Connect Timeout=60"
 cat > /tmp/apprunner-source.json << ENDJSON
 {
   "AuthenticationConfiguration": {"AccessRoleArn": "$ACCESS_ROLE_ARN"},
@@ -64,7 +60,6 @@ cat > /tmp/apprunner-source.json << ENDJSON
       "Port": "8080",
       "RuntimeEnvironmentVariables": {
         "ASPNETCORE_ENVIRONMENT": "Production",
-        "ConnectionStrings__DefaultConnection": "$CONN_STRING",
         "CORS_ALLOWED_ORIGINS": "PLACEHOLDER"
       }
     }
@@ -92,7 +87,6 @@ else
     --instance-configuration '{"Cpu": "0.25 vCPU", "Memory": "1 GB"}' \
     --auto-scaling-configuration-arn "$AUTOSCALING_ARN" \
     --health-check-configuration '{"Protocol": "HTTP", "Path": "/health", "Interval": 20, "Timeout": 10, "HealthyThreshold": 1, "UnhealthyThreshold": 10}' \
-    --network-configuration "{\"EgressConfiguration\": {\"EgressType\": \"VPC\", \"VpcConnectorArn\": \"$VPC_CONNECTOR_ARN\"}}" \
     --region $REGION \
     --query 'Service.ServiceUrl' --output text)
   SERVICE_ARN=$(aws apprunner list-services --query 'ServiceSummaryList[?ServiceName==`order-tracker-api`].ServiceArn' --output text)
@@ -189,7 +183,6 @@ cat > /tmp/apprunner-update.json << ENDJSON
       "Port": "8080",
       "RuntimeEnvironmentVariables": {
         "ASPNETCORE_ENVIRONMENT": "Production",
-        "ConnectionStrings__DefaultConnection": "$CONN_STRING",
         "CORS_ALLOWED_ORIGINS": "https://$CF_DOMAIN"
       }
     }
