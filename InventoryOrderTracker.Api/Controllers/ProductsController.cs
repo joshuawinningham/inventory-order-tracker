@@ -34,6 +34,9 @@ public class ProductsController : ControllerBase
     [HttpPost]
     public async Task<ActionResult<Product>> Create(CreateProductDto dto)
     {
+        if (await _db.Products.AnyAsync(p => p.Sku == dto.Sku))
+            return SkuConflict(dto.Sku);
+
         var product = new Product
         {
             Name = dto.Name,
@@ -56,6 +59,9 @@ public class ProductsController : ControllerBase
         var product = await _db.Products.FindAsync(id);
         if (product is null) return NotFound();
 
+        if (await _db.Products.AnyAsync(p => p.Sku == dto.Sku && p.Id != id))
+            return SkuConflict(dto.Sku);
+
         product.Name = dto.Name;
         product.Sku = dto.Sku;
         product.QuantityOnHand = dto.QuantityOnHand;
@@ -74,4 +80,7 @@ public class ProductsController : ControllerBase
             .Where(p => p.QuantityOnHand <= p.ReorderThreshold)
             .ToListAsync();
     }
+
+    private ConflictObjectResult SkuConflict(string sku) =>
+        Conflict(new { message = $"A product with SKU '{sku}' already exists.", code = "DUPLICATE_SKU" });
 }

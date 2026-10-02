@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using InventoryOrderTracker.Api.Models;
 
 namespace InventoryOrderTracker.Api.Data;
@@ -11,6 +12,19 @@ public class AppDbContext : DbContext
     public DbSet<Order> Orders => Set<Order>();
     public DbSet<OrderItem> OrderItems => Set<OrderItem>();
     public DbSet<StatusHistory> StatusHistories => Set<StatusHistory>();
+
+    protected override void ConfigureConventions(ModelConfigurationBuilder configurationBuilder)
+    {
+        // SQLite stores no time zone, so values come back as DateTimeKind.Unspecified and
+        // serialize without a "Z". Everything is written as UTC, so mark it UTC on the way out.
+        configurationBuilder.Properties<DateTime>().HaveConversion<UtcDateTimeConverter>();
+    }
+
+    private class UtcDateTimeConverter : ValueConverter<DateTime, DateTime>
+    {
+        public UtcDateTimeConverter()
+            : base(v => v, v => DateTime.SpecifyKind(v, DateTimeKind.Utc)) { }
+    }
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {

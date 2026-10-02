@@ -50,14 +50,12 @@ using (var scope = app.Services.CreateScope())
 {
     var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
     db.Database.Migrate();
+    DemoOrderSeeder.Seed(db);
 }
 
-// Configure the HTTP request pipeline.
-if (app.Environment.IsDevelopment())
-{
-    app.UseSwagger();
-    app.UseSwaggerUI();
-}
+// Swagger is enabled in every environment so the live demo API is browsable.
+app.UseSwagger();
+app.UseSwaggerUI();
 
 app.UseMiddleware<ExceptionMiddleware>();
 
@@ -69,6 +67,10 @@ if (!app.Environment.IsProduction())
 app.UseCors();
 app.MapControllers();
 
+app.MapGet("/", () => Results.Redirect("/swagger"));
 app.MapGet("/health", () => Results.Ok(new { status = "healthy" }));
 
 app.Run();
+
+// Exposes the entry point to WebApplicationFactory in the test project.
+public partial class Program { }

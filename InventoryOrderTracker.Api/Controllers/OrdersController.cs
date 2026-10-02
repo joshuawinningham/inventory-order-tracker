@@ -41,6 +41,7 @@ public class OrdersController : ControllerBase
             .Include(o => o.Items)
                 .ThenInclude(i => i.Product)
             .Include(o => o.StatusHistory.OrderBy(h => h.ChangedAt))
+            .AsSplitQuery()
             .FirstOrDefaultAsync(o => o.Id == id);
 
         if (order == null)
