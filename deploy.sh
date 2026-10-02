@@ -84,7 +84,7 @@ else
   API_URL=$(aws apprunner create-service \
     --service-name order-tracker-api \
     --source-configuration file:///tmp/apprunner-source.json \
-    --instance-configuration '{"Cpu": "0.25 vCPU", "Memory": "1 GB"}' \
+    --instance-configuration '{"Cpu": "0.25 vCPU", "Memory": "0.5 GB"}' \
     --auto-scaling-configuration-arn "$AUTOSCALING_ARN" \
     --health-check-configuration '{"Protocol": "HTTP", "Path": "/health", "Interval": 20, "Timeout": 10, "HealthyThreshold": 1, "UnhealthyThreshold": 10}' \
     --region $REGION \

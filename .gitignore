@@ -4,6 +4,11 @@ obj/
 *.user
 *.suo
 
+# Local SQLite database (created on first run)
+*.db
+*.db-shm
+*.db-wal
+
 # Node
 node_modules/
 dist/
@@ -21,5 +26,6 @@ Thumbs.db
 .env.production
 .env.local
 
-# Project screenshots (local reference only)
+# Project screenshots (local reference only), except the ones the README uses
 *.png
+!docs/*.png

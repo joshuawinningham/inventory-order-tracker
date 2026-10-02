@@ -21,8 +21,9 @@ inventory-order-tracker/
   InventoryOrderTracker.Api/         # ASP.NET Core Web API
     Controllers/
     Models/
-    Data/
+    Data/                            # DbContext, product seed data, DemoOrderSeeder
     Program.cs
+  InventoryOrderTracker.Tests/       # xUnit integration tests (WebApplicationFactory + in-memory SQLite)
   order-tracker-ui/                  # React + TypeScript + Vite
     src/
       components/
@@ -36,7 +37,7 @@ inventory-order-tracker/
 ```bash
 dotnet build                          # Build the API
 dotnet run                            # Run the API (includes Swagger UI)
-dotnet test                           # Run tests
+dotnet test ..                        # Run the test project
 dotnet ef migrations add <Name>       # Create a new EF migration
 dotnet ef database update             # Apply migrations
 ```
