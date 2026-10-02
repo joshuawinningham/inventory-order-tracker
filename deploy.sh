@@ -67,6 +67,16 @@ cat > /tmp/apprunner-source.json << ENDJSON
 }
 ENDJSON
 
+wait_for_service() {
+  while true; do
+    STATUS=$(aws apprunner describe-service --service-arn "$SERVICE_ARN" --query 'Service.Status' --output text)
+    echo "  $(date +%H:%M:%S) Status: $STATUS"
+    if [ "$STATUS" = "RUNNING" ]; then break; fi
+    if [ "$STATUS" = "CREATE_FAILED" ] || [ "$STATUS" = "UPDATE_FAILED" ]; then echo "FAILED! Check CloudWatch logs."; exit 1; fi
+    sleep 30
+  done
+}
+
 # Check if service already exists — update in place instead of delete/recreate
 EXISTING=$(aws apprunner list-services --query 'ServiceSummaryList[?ServiceName==`order-tracker-api`].ServiceArn' --output text 2>/dev/null)
 if [ -n "$EXISTING" ] && [ "$EXISTING" != "None" ]; then
@@ -79,6 +89,11 @@ if [ -n "$EXISTING" ] && [ "$EXISTING" != "None" ]; then
     --auto-scaling-configuration-arn "$AUTOSCALING_ARN" \
     --health-check-configuration '{"Protocol": "HTTP", "Path": "/health", "Interval": 20, "Timeout": 10, "HealthyThreshold": 1, "UnhealthyThreshold": 10}' \
     >/dev/null 2>&1
+  # update-service only re-pulls the image when the source config changes. The tag is
+  # always :latest, so explicitly deploy the image just pushed once the update settles.
+  echo "Waiting for config update, then deploying the new image..."
+  wait_for_service
+  aws apprunner start-deployment --service-arn "$SERVICE_ARN" >/dev/null
 else
   echo "No existing service — creating new..."
   API_URL=$(aws apprunner create-service \
@@ -94,14 +109,9 @@ fi
 
 echo "API URL: https://$API_URL"
 echo "Waiting for deployment (this takes ~3-10 minutes)..."
-
-while true; do
-  STATUS=$(aws apprunner describe-service --service-arn "$SERVICE_ARN" --query 'Service.Status' --output text)
-  echo "  $(date +%H:%M:%S) Status: $STATUS"
-  if [ "$STATUS" = "RUNNING" ]; then echo "API is RUNNING!"; break; fi
-  if [ "$STATUS" = "CREATE_FAILED" ] || [ "$STATUS" = "UPDATE_FAILED" ]; then echo "FAILED! Check CloudWatch logs."; exit 1; fi
-  sleep 30
-done
+sleep 5
+wait_for_service
+echo "API is RUNNING!"
 
 # Verify health
 echo "Verifying health endpoint..."
