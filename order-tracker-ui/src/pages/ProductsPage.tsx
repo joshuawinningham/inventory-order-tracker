@@ -66,7 +66,7 @@ export default function ProductsPage() {
       <h1 className="text-2xl font-bold mb-6">Products</h1>
 
       {/* Add product form */}
-      <form onSubmit={handleAdd} className="mb-6 grid grid-cols-5 gap-3 items-end bg-white p-4 rounded-lg shadow-sm">
+      <form onSubmit={handleAdd} className="mb-6 grid grid-cols-2 gap-3 items-end bg-white p-4 rounded-lg shadow-sm md:grid-cols-5">
         <div>
           <label className="block text-xs font-medium text-slate-600 mb-1">Name</label>
           <input required className="w-full rounded border border-slate-300 px-2 py-1.5 text-sm" value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} />
@@ -83,7 +83,7 @@ export default function ProductsPage() {
           <label className="block text-xs font-medium text-slate-600 mb-1">Reorder Threshold</label>
           <input type="number" min={0} required className="w-full rounded border border-slate-300 px-2 py-1.5 text-sm" value={form.reorderThreshold} onChange={e => setForm({ ...form, reorderThreshold: +e.target.value })} />
         </div>
-        <button type="submit" disabled={saving} className="rounded bg-blue-600 px-4 py-1.5 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50">
+        <button type="submit" disabled={saving} className="col-span-2 rounded bg-blue-600 px-4 py-1.5 md:col-span-1 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50">
           Add
         </button>
       </form>
@@ -95,7 +95,7 @@ export default function ProductsPage() {
       ) : products.length === 0 ? (
         <p className="text-slate-500">No products yet.</p>
       ) : (
-        <div className="overflow-hidden rounded-lg bg-white shadow-sm">
+        <div className="overflow-x-auto rounded-lg bg-white shadow-sm">
           <table className="min-w-full text-sm">
             <thead className="bg-slate-100 text-left text-xs font-semibold uppercase text-slate-500">
               <tr>

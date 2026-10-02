@@ -37,7 +37,7 @@ export default function DashboardPage() {
       <h1 className="text-2xl font-bold mb-6">Dashboard</h1>
 
       {/* Summary cards */}
-      <div className="grid grid-cols-4 gap-4 mb-8">
+      <div className="grid grid-cols-2 gap-4 mb-8 lg:grid-cols-4">
         {cards.map(c => (
           <div key={c.label} className={`rounded-lg ${c.color} p-4 shadow-sm`}>
             <p className="text-xs font-semibold uppercase text-slate-500">{c.label}</p>
@@ -48,9 +48,9 @@ export default function DashboardPage() {
         ))}
       </div>
 
-      <div className="grid grid-cols-3 gap-6">
+      <div className="grid gap-6 lg:grid-cols-3">
         {/* Recent orders */}
-        <div className="col-span-2 rounded-lg bg-white p-4 shadow-sm">
+        <div className="overflow-x-auto rounded-lg bg-white p-4 shadow-sm lg:col-span-2">
           <h2 className="text-sm font-semibold text-slate-500 uppercase mb-3">Recent Orders</h2>
           {recentOrders.length === 0 ? (
             <p className="text-sm text-slate-500">No orders yet.</p>

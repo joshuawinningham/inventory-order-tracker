@@ -38,7 +38,7 @@ export default function OrdersPage() {
       </div>
 
       {/* Filter tabs */}
-      <div className="flex gap-1 mb-4">
+      <div className="flex flex-wrap gap-1 mb-4">
         {TABS.map(t => (
           <button
             key={t ?? 'all'}
@@ -59,7 +59,7 @@ export default function OrdersPage() {
       ) : orders.length === 0 ? (
         <p className="text-slate-500">No orders found.</p>
       ) : (
-        <div className="overflow-hidden rounded-lg bg-white shadow-sm">
+        <div className="overflow-x-auto rounded-lg bg-white shadow-sm">
           <table className="min-w-full text-sm">
             <thead className="bg-slate-100 text-left text-xs font-semibold uppercase text-slate-500">
               <tr>

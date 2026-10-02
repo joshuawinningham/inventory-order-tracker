@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { api } from '../api/client';
 import type { Order, OrderStatus } from '../types';
@@ -19,7 +19,7 @@ export default function OrderDetailPage() {
   const [note, setNote] = useState('');
   const [advancing, setAdvancing] = useState(false);
 
-  async function load() {
+  const load = useCallback(async () => {
     try {
       setOrder(await api.getOrder(Number(id)));
       setError('');
@@ -28,9 +28,9 @@ export default function OrderDetailPage() {
     } finally {
       setLoading(false);
     }
-  }
+  }, [id]);
 
-  useEffect(() => { load(); }, [id]);
+  useEffect(() => { load(); }, [load]);
 
   async function handleAdvance() {
     if (!order) return;
@@ -63,9 +63,9 @@ export default function OrderDetailPage() {
         <StatusBadge status={order.status} />
       </div>
 
-      <div className="grid grid-cols-3 gap-6">
+      <div className="grid gap-6 lg:grid-cols-3">
         {/* Left column: details + items */}
-        <div className="col-span-2 space-y-6">
+        <div className="space-y-6 lg:col-span-2">
           <div className="rounded-lg bg-white p-4 shadow-sm">
             <h2 className="text-sm font-semibold text-slate-500 uppercase mb-2">Details</h2>
             <dl className="grid grid-cols-2 gap-y-2 text-sm">
@@ -104,7 +104,7 @@ export default function OrderDetailPage() {
           {next && (
             <div className="rounded-lg bg-white p-4 shadow-sm">
               <h2 className="text-sm font-semibold text-slate-500 uppercase mb-3">Advance Status</h2>
-              <div className="flex items-end gap-3">
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
                 <div className="flex-1">
                   <label className="block text-xs font-medium text-slate-600 mb-1">Note (optional)</label>
                   <input

@@ -11,11 +11,19 @@ import type {
 
 const BASE = (import.meta.env.VITE_API_URL || 'http://localhost:5239') + '/api';
 
+const UNAVAILABLE = "Can't reach the server right now. Please try again in a moment.";
+
 async function request<T>(url: string, init?: RequestInit): Promise<T> {
-  const res = await fetch(url, {
-    ...init,
-    headers: { 'Content-Type': 'application/json', ...init?.headers },
-  });
+  let res: Response;
+  try {
+    res = await fetch(url, {
+      ...init,
+      headers: { 'Content-Type': 'application/json', ...init?.headers },
+    });
+  } catch {
+    // fetch only rejects on network failure (offline, DNS, CORS), never on HTTP status
+    throw new Error(UNAVAILABLE);
+  }
   if (!res.ok) {
     const text = await res.text();
     let message = `${res.status} ${res.statusText}`;
@@ -29,7 +37,9 @@ async function request<T>(url: string, init?: RequestInit): Promise<T> {
         message = body.title;
       }
     } catch {
-      if (text) message = text;
+      // Non-JSON 5xx bodies come from the hosting proxy, not the API, so don't show them raw
+      if (res.status >= 500) message = UNAVAILABLE;
+      else if (text) message = text;
     }
     throw new Error(message);
   }

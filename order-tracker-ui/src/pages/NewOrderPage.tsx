@@ -82,8 +82,8 @@ export default function NewOrderPage() {
             const stock = stockFor(item.productId);
             const overStock = stock !== undefined && item.quantity > stock;
             return (
-              <div key={item.key} className="flex items-end gap-3 mb-3">
-                <div className="flex-1">
+              <div key={item.key} className="flex flex-wrap items-end gap-3 mb-3">
+                <div className="w-full sm:w-auto sm:flex-1">
                   <label className="block text-xs font-medium text-slate-600 mb-1">Product</label>
                   <select
                     required
