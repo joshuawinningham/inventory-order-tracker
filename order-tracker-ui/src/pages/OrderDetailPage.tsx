@@ -92,7 +92,7 @@ export default function OrderDetailPage() {
                 {order.items.map(item => (
                   <tr key={item.id}>
                     <td className="py-2 font-medium">{item.product?.name ?? `Product #${item.productId}`}</td>
-                    <td className="py-2 text-slate-600">{item.product?.sku ?? '—'}</td>
+                    <td className="whitespace-nowrap py-2 text-slate-600">{item.product?.sku ?? '—'}</td>
                     <td className="py-2">{item.quantity}</td>
                   </tr>
                 ))}

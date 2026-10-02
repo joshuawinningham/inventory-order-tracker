@@ -126,7 +126,7 @@ export default function ProductsPage() {
                     ) : (
                       <>
                         <td className="px-4 py-2 font-medium">{p.name}</td>
-                        <td className="px-4 py-2 text-slate-600">{p.sku}</td>
+                        <td className="whitespace-nowrap px-4 py-2 text-slate-600">{p.sku}</td>
                         <td className="px-4 py-2">
                           {p.quantityOnHand}
                           {low && <span className="ml-2 inline-block rounded-full bg-red-100 px-2 py-0.5 text-xs font-semibold text-red-700">Low Stock</span>}

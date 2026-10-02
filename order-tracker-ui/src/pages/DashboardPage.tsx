@@ -87,7 +87,7 @@ export default function DashboardPage() {
             <ul className="space-y-2">
               {lowStock.map(p => (
                 <li key={p.id} className="rounded bg-red-50 px-3 py-2 text-sm">
-                  <p className="font-medium text-red-800">{p.name} <span className="text-red-500 font-normal">({p.sku})</span></p>
+                  <p className="font-medium text-red-800">{p.name} <span className="whitespace-nowrap text-red-500 font-normal">({p.sku})</span></p>
                   <p className="text-xs text-red-600">Qty: {p.quantityOnHand} / Threshold: {p.reorderThreshold}</p>
                 </li>
               ))}
